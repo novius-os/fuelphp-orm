@@ -838,19 +838,23 @@ class Query
 		$r1c1    = reset($select);
 		$prefix  = substr($r1c1[0], 0, strpos($r1c1[0], '.') + 1);
 		$obj     = array();
-		foreach ($primary_key as $pk)
+		foreach ($primary_key as $alias => $pk)
 		{
-			$pk_c = null;
-			foreach ($select as $s)
-			{
-				$s[0] === $prefix.$pk and $pk_c = $s[1];
-			}
+            if (is_int($alias)) {
+                $pk_c = null;
+                foreach ($select as $s)
+                {
+                    $s[0] === $prefix.$pk and $pk_c = $s[1];
+                }
 
-			if (is_null($row[$pk_c]))
-			{
-				return false;
-			}
-			$obj[$pk] = $row[$pk_c];
+                if (is_null($row[$pk_c]))
+                {
+                    return false;
+                }
+                $obj[$pk] = $row[$pk_c];
+            } else {
+                $obj[$pk] = $row[$alias];
+            }
 		}
 
 		// Check for cached object
