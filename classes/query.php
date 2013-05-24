@@ -1,19 +1,33 @@
 <?php
 /**
+ * Fuel
+ *
  * Fuel is a fast, lightweight, community driven PHP5 framework.
  *
- * @package		Fuel
- * @version		1.0
- * @author		Fuel Development Team
- * @license		MIT License
- * @copyright	2010 - 2012 Fuel Development Team
- * @link		http://fuelphp.com
+ * @package    Fuel
+ * @version    1.6
+ * @author     Fuel Development Team
+ * @license    MIT License
+ * @copyright  2010 - 2013 Fuel Development Team
+ * @link       http://fuelphp.com
  */
 
 namespace Orm;
 
+/**
+ * ORM query object.
+ */
 class Query
 {
+	/**
+	 * Create a new instance of the Query class.
+	 *
+	 * @param	string  $model      name of the model this instance has to operate on
+	 * @param	mixed   $connection DB connection to use to run the query
+	 * @param	array   $options    any options to pass on to the query
+	 *
+	 * @return	Query	newly created instance
+	 */
 	public static function forge($model, $connection = null, $options = array())
 	{
 		return new static($model, $connection, $options);
@@ -28,6 +42,11 @@ class Query
 	 * @var  null|string  connection name to use
 	 */
 	protected $connection;
+
+	/**
+	 * @var  null|string  connection name to use for writes
+	 */
+	protected $write_connection;
 
 	/**
 	 * @var  array  database view to use with keys 'view' and 'columns'
@@ -85,14 +104,46 @@ class Query
 	protected $order_by = array();
 
 	/**
+	 * @var  array  group by clauses
+	 */
+	protected $group_by = array();
+
+	/**
 	 * @var  array  values for insert or update
 	 */
 	protected $values = array();
 
+	/**
+	 * @var  array  select filters
+	 */
+	protected $select_filter = array();
+
+	/**
+	 * @var  bool  whether or not to retrieve a cached object
+	 */
+	protected $from_cache = true;
+
+	/**
+	 * Create a new instance of the Query class.
+	 *
+	 * @param	string  $model        Name of the model this instance has to operate on
+	 * @param	mixed   $connection   DB connection to use to run the query
+	 * @param	array   $options      Any options to pass on to the query
+	 * @param	mixed   $table_alias  Optionally, the alias to use for the models table
+	 */
 	protected function __construct($model, $connection, $options, $table_alias = null)
 	{
 		$this->model = $model;
-		$this->connection = $connection;
+
+		if (is_array($connection))
+		{
+			list($this->connection, $this->write_connection) = $connection;
+		}
+		else
+		{
+			$this->connection = $connection;
+			$this->write_connection = $connection;
+		}
 
 		foreach ($options as $opt => $val)
 		{
@@ -116,6 +167,9 @@ class Query
 					$val = (array) $val;
 					$this->order_by($val);
 					break;
+				case 'group_by':
+					$this->group_by($val);
+					break;
 				case 'limit':
 					$this->limit($val);
 					break;
@@ -128,21 +182,43 @@ class Query
 				case 'rows_offset':
 					$this->rows_offset($val);
 					break;
+				case 'from_cache':
+					$this->from_cache($val);
+					break;
 			}
 		}
+	}
+
+	/**
+	 * Enables or disables the object cache for this query
+	 *
+	 * @param  bool  $cache    Whether or not to use the object cache on this query
+	 *
+	 * @return  Query
+	 */
+	public function from_cache($cache = true)
+	{
+		$this->from_cache = (bool) $cache;
+
+		return $this;
 	}
 
 	/**
 	 * Select which properties are included, each as its own param. Or don't give input to retrieve
 	 * the current selection.
 	 *
+	 * @param bool          $add_pks    Whether or not to add the Primary Keys to the list of selected columns
+	 * @param string|array  $fields     Optionally. Which field/fields must be retrieved
+	 *
+	 * @throws \FuelException No properties found in model
+	 *
 	 * @return  void|array
 	 */
-	public function select()
+	public function select($add_pks = true)
 	{
 		$fields = func_get_args();
 
-		if (empty($fields))
+		if (empty($fields) or is_bool($add_pks))
 		{
 			if (empty($this->select))
 			{
@@ -154,7 +230,7 @@ class Query
 				}
 				foreach ($fields as $field)
 				{
-					$this->select($field);
+					in_array($field, $this->select_filter) or $this->select($field);
 				}
 
 				if ($this->view)
@@ -170,12 +246,15 @@ class Query
 			$select = $this->select;
 
 			// ensure all PKs are being selected
-			$pks = call_user_func($this->model.'::primary_key');
-			foreach($pks as $pk)
+			if ($add_pks)
 			{
-				if ( ! in_array($this->alias.'.'.$pk, $this->select))
+				$pks = call_user_func($this->model.'::primary_key');
+				foreach($pks as $pk)
 				{
-					$this->select($pk);
+					if ( ! in_array($this->alias.'.'.$pk, $this->select))
+					{
+						$this->select($pk);
+					}
 				}
 			}
 
@@ -195,7 +274,19 @@ class Query
 		$i = count($this->select);
 		foreach ($fields as $val)
 		{
-			$this->select[$this->alias.'_c'.$i++] = (strpos($val, '.') === false ? $this->alias.'.' : '').$val;
+			is_array($val) or $val = array($val => true);
+
+			foreach ($val as $field => $include)
+			{
+				if ($include)
+				{
+					$this->select[$this->alias.'_c'.$i++] = (strpos($field, '.') === false ? $this->alias.'.' : '').$field;
+				}
+				else
+				{
+					$this->select_filter[] = $field;
+				}
+			}
 		}
 
 		return $this;
@@ -204,7 +295,10 @@ class Query
 	/**
 	 * Set a view to use instead of the table
 	 *
-	 * @param   string
+	 * @param  string   $view   Name of view which you want to use
+	 *
+	 * @throws \OutOfBoundsException Cannot use undefined database view, must be defined with Model
+	 *
 	 * @return  Query
 	 */
 	public function use_view($view)
@@ -221,10 +315,26 @@ class Query
 	}
 
 	/**
+	 * Creates a "GROUP BY ..." filter.
+	 *
+	 * @param   mixed   $coulmns    Column name or array($column, $alias) or object
+	 * @return  $this
+	 */
+	public function group_by()
+	{
+		$columns = func_get_args();
+
+		$this->group_by = array_merge($this->group_by, $columns);
+
+		return $this;
+	}
+
+	/**
 	 * Set the limit
 	 *
-	 * @param   int
-	 * @return  Query
+	 * @param   int $limit
+	 *
+	 * @return  $this
 	 */
 	public function limit($limit)
 	{
@@ -236,8 +346,9 @@ class Query
 	/**
 	 * Set the offset
 	 *
-	 * @param   int
-	 * @return  Query
+	 * @param   int $offset
+	 *
+	 * @return  $this
 	 */
 	public function offset($offset)
 	{
@@ -249,8 +360,9 @@ class Query
 	/**
 	 * Set the limit of rows requested
 	 *
-	 * @param   int
-	 * @return  Query
+	 * @param   int $limit
+	 *
+	 * @return  $this
 	 */
 	public function rows_limit($limit)
 	{
@@ -262,8 +374,9 @@ class Query
 	/**
 	 * Set the offset of rows requested
 	 *
-	 * @param   int
-	 * @return  Query
+	 * @param   int $offset
+	 *
+	 * @return  $this
 	 */
 	public function rows_offset($offset)
 	{
@@ -275,10 +388,11 @@ class Query
 	/**
 	 * Set where condition
 	 *
-	 * @param   string  property
-	 * @param   string  comparison type (can be omitted)
-	 * @param   string  comparison value
-	 * @return  Query
+	 * @param   string  Property
+	 * @param   string  Comparison type (can be omitted)
+	 * @param   string  Comparison value
+	 *
+	 * @return  $this
 	 */
 	public function where()
 	{
@@ -291,10 +405,11 @@ class Query
 	/**
 	 * Set or_where condition
 	 *
-	 * @param   string  property
-	 * @param   string  comparison type (can be omitted)
-	 * @param   string  comparison value
-	 * @return  Query
+	 * @param   string  Property
+	 * @param   string  Comparison type (can be omitted)
+	 * @param   string  Comparison value
+	 *
+	 * @return  $this
 	 */
 	public function or_where()
 	{
@@ -307,9 +422,12 @@ class Query
 	/**
 	 * Does the work for where() and or_where()
 	 *
-	 * @param   array
-	 * @param   string
-	 * @return  Query
+	 * @param   array   $condition
+	 * @param   string  $type
+	 *
+	 * @throws \FuelException
+	 *
+	 * @return  $this
 	 */
 	public function _where($condition, $type = 'and_where')
 	{
@@ -348,7 +466,7 @@ class Query
 	/**
 	 * Open a nested and_where condition
 	 *
-	 * @return  Query
+	 * @return  $this
 	 */
 	public function and_where_open()
 	{
@@ -360,7 +478,7 @@ class Query
 	/**
 	 * Close a nested and_where condition
 	 *
-	 * @return  Query
+	 * @return  $this
 	 */
 	public function and_where_close()
 	{
@@ -372,7 +490,7 @@ class Query
 	/**
 	 * Alias to and_where_open()
 	 *
-	 * @return  Query
+	 * @return  $this
 	 */
 	public function where_open()
 	{
@@ -384,7 +502,7 @@ class Query
 	/**
 	 * Alias to and_where_close()
 	 *
-	 * @return  Query
+	 * @return  $this
 	 */
 	public function where_close()
 	{
@@ -396,7 +514,7 @@ class Query
 	/**
 	 * Open a nested or_where condition
 	 *
-	 * @return  Query
+	 * @return  $this
 	 */
 	public function or_where_open()
 	{
@@ -408,7 +526,7 @@ class Query
 	/**
 	 * Close a nested or_where condition
 	 *
-	 * @return  Query
+	 * @return  $this
 	 */
 	public function or_where_close()
 	{
@@ -452,9 +570,10 @@ class Query
 	/**
 	 * Set the order_by
 	 *
-	 * @param   string|array
-	 * @param   string|null
-	 * @return  Query
+	 * @param   string|array  $property
+	 * @param   string        $direction
+	 *
+	 * @return  $this
 	 */
 	public function order_by($property, $direction = 'ASC')
 	{
@@ -488,8 +607,12 @@ class Query
 	/**
 	 * Set a relation to include
 	 *
-	 * @param   string
-	 * @return  Query
+	 * @param   string  $relation
+	 * @param   array   $conditions    Optionally
+	 *
+	 * @throws \UnexpectedValueException Relation was not found in the model
+	 *
+	 * @return  $this
 	 */
 	public function related($relation, $conditions = array())
 	{
@@ -544,8 +667,9 @@ class Query
 	/**
 	 * Add a table to join, consider this a protect method only for Orm package usage
 	 *
-	 * @param   array
-	 * @return  Query
+	 * @param   array   $join
+	 *
+	 * @return  $this
 	 */
 	public function _join(array $join)
 	{
@@ -557,9 +681,10 @@ class Query
 	/**
 	 * Set any properties for insert or update
 	 *
-	 * @param   string|array
-	 * @param   mixed
-	 * @return  Query
+	 * @param   string|array  $property
+	 * @param   mixed         $value    Optionally
+	 *
+	 * @return  $this
 	 */
 	public function set($property, $value = null)
 	{
@@ -580,8 +705,13 @@ class Query
 	/**
 	 * Build a select, delete or update query
 	 *
-	 * @param   \Fuel\Core\Database_Query_Builder_Where
-	 * @param   string|select  either array for select query or string update, delete, insert
+	 * @param   \Fuel\Core\Database_Query_Builder_Where  DB where() query object
+	 * @param   array $columns  Optionally
+	 * @param   string $type    Type of query to build (select/update/delete/insert)
+	 *
+	 * @throws \FuelException            Models cannot be related between different database connections
+	 * @throws \UnexpectedValueException Trying to get the relation of an unloaded relation
+	 *
 	 * @return  array          with keys query and relations
 	 */
 	public function build_query(\Fuel\Core\Database_Query_Builder_Where $query, $columns = array(), $type = 'select')
@@ -598,37 +728,26 @@ class Query
 			$query->offset($this->offset);
 		}
 
-		// Get the order
-		$order_by = $this->order_by;
-
-		// create a backup for subquery
-		$order_by_backup = $order_by;
-		if ( ! empty($order_by))
-		{
-			foreach ($order_by as $key => $ob)
-			{
-				if ( ! $ob[0] instanceof \Fuel\Core\Database_Expression and strpos($ob[0], $this->alias.'.') === 0)
-				{
-					$query->order_by($type == 'select' ? $ob[0] : substr($ob[0], strlen($this->alias.'.')), $ob[1]);
-
-					// order by has been updated to Database_Query_Builder_Where instance, set it to empty to avoid duplicate entries
-					unset($order_by[$key]);
-				}
-			}
-		}
-
-
+		$where_conditions = call_user_func($this->model.'::condition', 'where');
+		empty($where_conditions) or $this->where($where_conditions);
 
 		$where_backup = $this->where;
 		if ( ! empty($this->where))
 		{
 			$open_nests = 0;
+			$where_nested = array();
+			$include_nested = true;
 			foreach ($this->where as $key => $w)
 			{
 				list($method, $conditional) = $w;
 
 				if ($type == 'select' and (empty($conditional) or $open_nests > 0))
 				{
+					$include_nested and $where_nested[$key] = $w;
+					if ( ! empty($conditional) and strpos($conditional[0], $this->alias.'.') !== 0)
+					{
+						$include_nested = false;
+					}
 					strpos($method, '_open') and $open_nests++;
 					strpos($method, '_close') and $open_nests--;
 					continue;
@@ -645,6 +764,27 @@ class Query
 					}
 					call_user_func_array(array($query, $method), $conditional);
 					unset($this->where[$key]);
+				}
+			}
+
+			if ($include_nested and ! empty($where_nested))
+			{
+				foreach ($where_nested as $key => $w)
+				{
+					list($method, $conditional) = $w;
+
+					if (empty($conditional)
+						or strpos($conditional[0], $this->alias.'.') === 0
+						or ($type != 'select' and $conditional[0] instanceof \Fuel\Core\Database_Expression))
+					{
+						if ($type != 'select' and ! empty($conditional)
+							and ! $conditional[0] instanceof \Fuel\Core\Database_Expression)
+						{
+							$conditional[0] = substr($conditional[0], strlen($this->alias.'.'));
+						}
+						call_user_func_array(array($query, $method), $conditional);
+						unset($this->where[$key]);
+					}
 				}
 			}
 		}
@@ -674,8 +814,12 @@ class Query
 				$alias = $this->alias;
 			}
 
-			$models = array_merge($models, $rel[0]->join($alias, $name, $i++, $rel[1]));
+			$join = $rel[0]->join($alias, $name, $i++, $rel[1]);
+			$models = array_merge($models, $this->modify_join_result($join, $name));
 		}
+
+		// if no order_by was given, see if a default was defined in the model
+		empty($this->order_by) and $this->order_by(call_user_func($this->model.'::condition', 'order_by'));
 
 		if ($this->use_subquery())
 		{
@@ -688,12 +832,23 @@ class Query
 				}
 			}
 
+			// do we need to add order_by clauses on the subquery?
+			foreach ($this->order_by as $idx => $ob)
+			{
+				if ( ! $ob[0] instanceof \Fuel\Core\Database_Expression)
+				{
+					if (strpos($ob[0], $this->alias.'.') === 0)
+					{
+						// order by on the current model
+						$type == 'select' or $ob[0] = substr($ob[0], strlen($this->alias.'.'));
+						$query->order_by($ob[0], $ob[1]);
+					}
+				}
+			}
+
 			// make current query subquery of ultimate query
 			$new_query = call_user_func_array('DB::select', $columns);
 			$query = $new_query->from(array($query, $this->alias));
-
-			// set order_by from backup
-			$order_by = $order_by_backup;
 		}
 		else
 		{
@@ -718,9 +873,10 @@ class Query
 		}
 		foreach ($models as $m)
 		{
-			if ($m['connection'] != $this->connection)
+			if (($type == 'select' and $m['connection'] != $this->connection) or
+				($type != 'select' and $m['connection'] != $this->write_connection))
 			{
-				throw new \FuelException('Models cannot be related between connection.');
+				throw new \FuelException('Models cannot be related between different database connections.');
 			}
 
 			$join_query = $query->join($m['table'], $m['join_type']);
@@ -729,6 +885,9 @@ class Query
 				$join_query->on($on[0], $on[1], $on[2]);
 			}
 		}
+
+		// Get the order, if none set see if we have an order_by condition set
+		$order_by = $order_by_backup = $this->order_by;
 
 		// Add any additional order_by and where clauses from the relations
 		foreach ($models as $m_name => $m)
@@ -746,7 +905,7 @@ class Query
 							$v_ob = $m_name.'.'.$v_ob;
 						}
 
-						$order_by[] = array($v_ob, 'ASC');
+						$order_by[] = array($v_ob, $v_dir);
 					}
 					else
 					{
@@ -760,6 +919,7 @@ class Query
 				$this->_parse_where_array($m['where'], $m_name.'.');
 			}
 		}
+
 		// Get the order
 		if ( ! empty($order_by))
 		{
@@ -767,17 +927,30 @@ class Query
 			{
 				if ( ! $ob[0] instanceof \Fuel\Core\Database_Expression)
 				{
-					// try to rewrite conditions on the relations to their table alias
-					$dotpos = strrpos($ob[0], '.');
-					$relation = substr($ob[0], 0, $dotpos);
-					if ($dotpos > 0 and array_key_exists($relation, $models))
+					if (strpos($ob[0], $this->alias.'.') === 0)
 					{
-						$ob[0] = $models[$relation]['table'][1].substr($ob[0], $dotpos);
+						// order by on the current model
+						$type == 'select' or $ob[0] = substr($ob[0], strlen($this->alias.'.'));
+					}
+					else
+					{
+						// try to rewrite conditions on the relations to their table alias
+						$dotpos = strrpos($ob[0], '.');
+						$relation = substr($ob[0], 0, $dotpos);
+						if ($dotpos > 0 and array_key_exists($relation, $models))
+						{
+							$ob[0] = $models[$relation]['table'][1].substr($ob[0], $dotpos);
+						}
 					}
 				}
-
 				$query->order_by($ob[0], $ob[1]);
 			}
+		}
+
+		// Get the grouping
+		if ( ! empty($this->group_by))
+		{
+			call_user_func_array(array($query, 'group_by'), $this->group_by);
 		}
 
 		// put omitted where conditions back
@@ -803,6 +976,7 @@ class Query
 		}
 
 		$this->where = $where_backup;
+		$this->order_by = $order_by_backup;
 
 		// Set the row limit and offset, these are applied to the outer query when a subquery
 		// is used or overwrite limit/offset when it's a normal query
@@ -810,6 +984,14 @@ class Query
 		! is_null($this->rows_offset) and $query->offset($this->rows_offset);
 
 		return array('query' => $query, 'models' => $models);
+	}
+
+	/**
+	 * Allows subclasses to make changes to the join information before it is used
+	 */
+	protected function modify_join_result($join_result, $name)
+	{
+		return $join_result;
 	}
 
 	/**
@@ -825,11 +1007,13 @@ class Query
 	/**
 	 * Hydrate model instances with retrieved data
 	 *
-	 * @param   array   row from the database
-	 * @param   array   relations to be expected
-	 * @param   array   current result array (by reference)
-	 * @param   string  model classname to hydrate
-	 * @param   array   columns to use
+	 * @param   array   &$row   Row from the database
+	 * @param   array   $models Relations to be expected
+	 * @param   array   $result Current result array (by reference)
+	 * @param   string  $model  Optionally. Model classname to hydrate
+	 * @param   array   $select Optionally. Columns to use
+	 * @param   array   $primary_key    Optionally. Primary key(s) for this model
+	 *
 	 * @return  Model
 	 */
 	public function hydrate(&$row, $models, &$result, $model = null, $select = null, $primary_key = null)
@@ -859,7 +1043,7 @@ class Query
 
 		// Check for cached object
 		$pk  = count($primary_key) == 1 ? reset($obj) : '['.implode('][', $obj).']';
-		$obj = Model::cached_object($pk, $model);
+		$obj = $this->from_cache ? Model::cached_object($pk, $model) : false;
 
 		// Create the object when it wasn't found
 		if ( ! $obj)
@@ -876,7 +1060,19 @@ class Query
 				}
 				unset($row[$s[1]]);
 			}
-			$obj = $model::forge($obj, false, $this->view ? $this->view['_name'] : null);
+			$obj = $model::forge($obj, false, $this->view ? $this->view['_name'] : null, $this->from_cache);
+		}
+		else
+		{
+			// add fields not present in the already cached version
+			foreach ($select as $s)
+			{
+				$f = substr($s[0], strpos($s[0], '.') + 1);
+				if ( ! isset($obj->{$f}))
+				{
+					$obj->{$f} = $row[$s[1]];
+				}
+			}
 		}
 
 		// if the result to be generated is an array and the current object is not yet in there
@@ -947,8 +1143,7 @@ class Query
 		$query = call_user_func_array('DB::select', $select);
 
 		// Set from view/table
-		$table = $this->view ? $this->view['view'] : call_user_func($this->model.'::table');
-		$query->from(array($table, $this->alias));
+		$query->from(array($this->_table(), $this->alias));
 
 		// Build the query further
 		$tmp     = $this->build_query($query, $columns);
@@ -996,7 +1191,7 @@ class Query
 	public function get_query()
 	{
 		// Get the columns
-		$columns = $this->select();
+		$columns = $this->select(false);
 
 		// Start building the query
 		$select = $columns;
@@ -1011,7 +1206,7 @@ class Query
 		$query = call_user_func_array('DB::select', $select);
 
 		// Set from table
-		$query->from(array(call_user_func($this->model.'::table'), $this->alias));
+		$query->from(array($this->_table(), $this->alias));
 
 		// Build the query further
 		$tmp     = $this->build_query($query, $columns);
@@ -1026,15 +1221,28 @@ class Query
 	 */
 	public function get_one()
 	{
-		// get current limit and save it while fetching the first result
+		// save the current limits
 		$limit = $this->limit;
-		$this->limit = 1;
+		$rows_limit = $this->rows_limit;
+
+		// if a row limit is set, use that
+		if ($this->rows_limit !== null)
+		{
+			$this->limit = null;
+			$this->rows_limit = 1;
+		}
+		else
+		{
+			$this->limit = 1;
+			$this->rows_limit = null;
+		}
 
 		// get the result using normal find
 		$result = $this->get();
 
-		// put back the old limit
+		// put back the old limits
 		$this->limit = $limit;
+		$this->rows_limit = $rows_limit;
 
 		return $result ? reset($result) : null;
 	}
@@ -1042,8 +1250,10 @@ class Query
 	/**
 	 * Count the result of a query
 	 *
-	 * @param   bool  false for random selected column or specific column, only works for main model currently
-	 * @return  int   number of rows OR false
+	 * @param   bool  $column   False for random selected column or specific column, only works for main model currently
+	 * @param   bool  $distinct True if DISTINCT has to be aded to the query
+	 *
+	 * @return  mixed   number of rows OR false
 	 */
 	public function count($column = null, $distinct = true)
 	{
@@ -1058,8 +1268,8 @@ class Query
 		// Remove the current select and
 		$query = \DB::select($columns);
 
-		// Set from table
-		$query->from(array(call_user_func($this->model.'::table'), $this->alias));
+		// Set from view or table
+		$query->from(array($this->_table(), $this->alias));
 
 		$tmp   = $this->build_query($query, $columns, 'select');
 		$query = $tmp['query'];
@@ -1077,8 +1287,8 @@ class Query
 	/**
 	 * Get the maximum of a column for the current query
 	 *
-	 * @param   string  column
-	 * @return  mixed   maximum value OR false
+	 * @param   string      $column Column
+	 * @return  bool|int    maximum value OR false
 	 */
 	public function max($column)
 	{
@@ -1093,7 +1303,7 @@ class Query
 		$query = \DB::select($columns);
 
 		// Set from table
-		$query->from(array(call_user_func($this->model.'::table'), $this->alias));
+		$query->from(array($this->_table(), $this->alias));
 
 		$tmp   = $this->build_query($query, $columns, 'max');
 		$query = $tmp['query'];
@@ -1105,14 +1315,15 @@ class Query
 			return false;
 		}
 
-		return $max;
+		return (int) $max;
 	}
 
 	/**
 	 * Get the minimum of a column for the current query
 	 *
-	 * @param   string  column
-	 * @return  mixed   minimum value OR false
+	 * @param   string      $column Column which min value you want to get
+	 *
+	 * @return  bool|int    minimum value OR false
 	 */
 	public function min($column)
 	{
@@ -1127,7 +1338,7 @@ class Query
 		$query = \DB::select($columns);
 
 		// Set from table
-		$query->from(array(call_user_func($this->model.'::table'), $this->alias));
+		$query->from(array($this->_table(), $this->alias));
 
 		$tmp   = $this->build_query($query, $columns, 'min');
 		$query = $tmp['query'];
@@ -1139,19 +1350,19 @@ class Query
 			return false;
 		}
 
-		return $min;
+		return (int) $min;
 	}
 
 	/**
 	 * Run INSERT with the current values
 	 *
-	 * @return  mixed  last inserted ID or false on failure
+	 * @return  bool|int    Last inserted ID or false on failure
 	 */
 	public function insert()
 	{
 		$res = \DB::insert(call_user_func($this->model.'::table'), array_keys($this->values))
 			->values(array_values($this->values))
-			->execute($this->connection);
+			->execute($this->write_connection);
 
 		// Failed to save the new record
 		if ($res[0] === 0)
@@ -1177,7 +1388,7 @@ class Query
 		$query = \DB::update(call_user_func($this->model.'::table'));
 		$tmp   = $this->build_query($query, array(), 'update');
 		$query = $tmp['query'];
-		$res = $query->set($this->values)->execute($this->connection);
+		$res = $query->set($this->values)->execute($this->write_connection);
 
 		// put back any relations settings
 		$this->relations = $tmp_relations;
@@ -1201,11 +1412,19 @@ class Query
 		$query = \DB::delete(call_user_func($this->model.'::table'));
 		$tmp   = $this->build_query($query, array(), 'delete');
 		$query = $tmp['query'];
-		$res = $query->execute($this->connection);
+		$res = $query->execute($this->write_connection);
 
 		// put back any relations settings
 		$this->relations = $tmp_relations;
 
 		return $res > 0;
+	}
+
+	/**
+	 * Returns target table (or view, if specified).
+	 */
+	protected function _table()
+	{
+		return $this->view ? $this->view['view'] : call_user_func($this->model.'::table');
 	}
 }
