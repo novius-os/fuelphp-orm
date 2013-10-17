@@ -112,7 +112,14 @@ class ManyMany extends Relation
 			next($this->key_to);
 		}
 
-		foreach (\Arr::get($this->conditions, 'where', array()) as $key => $condition)
+        foreach (\Arr::get($this->conditions, 'through_where', array()) as $key => $condition)
+        {
+            is_array($condition) or $condition = array($key, '=', $condition);
+            $condition[0] = 't0_through.'.$condition[0];
+            $query->where($condition);
+        }
+
+        foreach (\Arr::get($this->conditions, 'where', array()) as $key => $condition)
 		{
 			is_array($condition) or $condition = array($key, '=', $condition);
 			$query->where($condition);
@@ -195,6 +202,21 @@ class ManyMany extends Relation
 			$models[$rel_name]['join_on'][] = array($alias_to.'_through.'.$key, '=', $alias_to.'.'.current($this->key_to));
 			next($this->key_to);
 		}
+
+        foreach (array(\Arr::get($this->conditions, 'through_where', array()), \Arr::get($conditions, 'through_where', array())) as $c)
+        {
+            foreach ($c as $key => $condition)
+            {
+                ! is_array($condition) and $condition = array($key, '=', $condition);
+                if ( ! $condition[0] instanceof \Fuel\Core\Database_Expression and strpos($condition[0], '.') === false)
+                {
+                    $condition[0] = $alias_to.'_through'.'.'.$condition[0];
+                }
+                is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $models[$rel_name]['connection']);
+
+                $models[$rel_name.'_through']['join_on'][] = $condition;
+            }
+        }
 
 		foreach (array(\Arr::get($this->conditions, 'where', array()), \Arr::get($conditions, 'join_on', array())) as $c)
 		{
