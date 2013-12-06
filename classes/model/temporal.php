@@ -5,7 +5,7 @@
  * Fuel is a fast, lightweight, community driven PHP5 framework.
  *
  * @package    Fuel
- * @version    1.6
+ * @version    1.7
  * @author     Fuel Development Team
  * @license    MIT License
  * @copyright  2010 - 2013 Fuel Development Team
@@ -147,8 +147,8 @@ class Model_Temporal extends Model
 		$timestamp_start_name = static::temporal_property('start_column');
 		$timestamp_end_name = static::temporal_property('end_column');
 
-		//Select the next latest revision after the requested one then use that
-		//to get the revision before.
+		// Select the next latest revision after the requested one then use that
+		// to get the revision before.
 		self::disable_primary_key_check();
 
 		$query = static::query()
@@ -166,7 +166,13 @@ class Model_Temporal extends Model
 		}
 
 		$query_result = $query->get_one();
-		$query_result->set_lazy_timestamp($timestamp);
+		
+		// If the query did not return a result but null, then we cannot call
+		//  set_lazy_timestamp on it without throwing errors
+		if ( $query_result !== null )
+		{
+			$query_result->set_lazy_timestamp($timestamp);
+		}
 		return $query_result;
 	}
 
@@ -182,7 +188,7 @@ class Model_Temporal extends Model
 	 * @param string $property
 	 * @return mixed
 	 */
-	public function & get($property)
+	public function & get($property, array $conditions = array())
 	{
 		// if a timestamp is set and that we have a temporal relation
 		$rel = static::relations($property);
@@ -194,13 +200,13 @@ class Model_Temporal extends Model
 			$class_name = $rel->model_to;
 
 			$class_name::make_query_temporal($lazy_timestamp);
-			$result =& parent::get($property);
+			$result =& parent::get($property, $conditions);
 			$class_name::make_query_temporal(null);
 
 			return $result;
 		}
 
-		return parent::get($property);
+		return parent::get($property, $conditions);
 	}
 
 	/**
@@ -325,7 +331,7 @@ class Model_Temporal extends Model
 	 * Returns an array of the primary keys that are not related to temporal
 	 * timestamp information.
 	 */
-	private static function getNonTimestampPks()
+	public static function getNonTimestampPks()
 	{
 		$timestamp_start_name = static::temporal_property('start_column');
 		$timestamp_end_name = static::temporal_property('end_column');
@@ -351,7 +357,7 @@ class Model_Temporal extends Model
 	 */
 	public function save($cascade = null, $use_transaction = false)
 	{
-		//Load temporal properties.
+		// Load temporal properties.
 		$timestamp_start_name = static::temporal_property('start_column');
 		$timestamp_end_name = static::temporal_property('end_column');
 		$mysql_timestamp = static::temporal_property('mysql_timestamp');
@@ -361,7 +367,7 @@ class Model_Temporal extends Model
 			\Date::forge()->format('mysql') :
 			\Date::forge()->get_timestamp();
 
-		//If this is new then just call the parent and let everything happen as normal
+		// If this is new then just call the parent and let everything happen as normal
 		if ($this->is_new())
 		{
 			static::disable_primary_key_check();
@@ -369,42 +375,45 @@ class Model_Temporal extends Model
 			$this->{$timestamp_end_name} = $max_timestamp;
 			static::enable_primary_key_check();
 
-			//Make sure save will populate the PK
+			// Make sure save will populate the PK
 			static::enable_id_only_primary_key();
 			$result = parent::save($cascade, $use_transaction);
 			static::disable_id_only_primary_key();
 
 			return $result;
 		}
-		//If this is an update then set a new PK, save and then insert a new row
+		// If this is an update then set a new PK, save and then insert a new row
 		else
 		{
 			$diff = $this->get_diff();
 
 			if (count($diff[0]) > 0)
 			{
-				//Take a copy of this model
+				// Take a copy of this model
 				$revision = clone $this;
 
-				//Give that new model an end time of the current time after resetting back to the old data
+				// Give that new model an end time of the current time after resetting back to the old data
 				$revision->set($this->_original);
 
 				self::disable_primary_key_check();
 				$revision->{$timestamp_end_name} = $current_timestamp;
 				self::enable_primary_key_check();
 
-				//save that, now we have our archive
+				// Make sure relations stay the same
+				$revision->_original_relations = $this->_data_relations;
+
+				// save that, now we have our archive
 				self::enable_id_only_primary_key();
 				$revision_result = $revision->overwrite(false, $use_transaction);
 				self::disable_id_only_primary_key();
 
 				if ( ! $revision_result)
 				{
-					//If the revision did not save then stop the process so the user can do something.
+					// If the revision did not save then stop the process so the user can do something.
 					return false;
 				}
 
-				//Now that the old data is saved update the current object so its end timestamp is now
+				// Now that the old data is saved update the current object so its end timestamp is now
 				self::disable_primary_key_check();
 				$this->{$timestamp_start_name} = $current_timestamp;
 				self::enable_primary_key_check();
@@ -415,7 +424,7 @@ class Model_Temporal extends Model
 			}
 			else
 			{
-				//If nothing has changed call parent::save() to insure relations are saved too
+				// If nothing has changed call parent::save() to insure relations are saved too
 				return parent::save($cascade, $use_transaction);
 			}
 		}
@@ -442,8 +451,8 @@ class Model_Temporal extends Model
 		$timestamp_end_name = static::temporal_property('end_column');
 		$max_timestamp = static::temporal_property('max_timestamp');
 
-		//check to see if there is a currently active row, if so then don't
-		//restore anything.
+		// check to see if there is a currently active row, if so then don't
+		// restore anything.
 		$activeRow = static::find('first', array(
 				'where' => array(
 					array('id', $this->id),
@@ -453,8 +462,8 @@ class Model_Temporal extends Model
 
 		if(is_null($activeRow))
 		{
-			//No active row was found so we are ok to go and restore the this
-			//revision
+			// No active row was found so we are ok to go and restore the this
+			// revision
 			$timestamp_start_name = static::temporal_property('start_column');
 			$mysql_timestamp = static::temporal_property('mysql_timestamp');
 
@@ -463,15 +472,15 @@ class Model_Temporal extends Model
 				\Date::forge()->format('mysql') :
 				\Date::forge()->get_timestamp();
 
-			//Make sure this is saved as a new entry
+			// Make sure this is saved as a new entry
 			$this->_is_new = true;
 
-			//Update timestamps
+			// Update timestamps
 			static::disable_primary_key_check();
 			$this->{$timestamp_start_name} = $current_timestamp;
 			$this->{$timestamp_end_name} = $max_timestamp;
 
-			//Save
+			// Save
 			$result = parent::save();
 			static::enable_primary_key_check();
 
@@ -486,9 +495,9 @@ class Model_Temporal extends Model
 	 */
 	public function purge()
 	{
-		//Get a clean query object so there's no temporal filtering
+		// Get a clean query object so there's no temporal filtering
 		$query = parent::query();
-		//Then select and delete
+		// Then select and delete
 		return $query->where('id', $this->id)
 			->delete();
 	}
@@ -551,21 +560,21 @@ class Model_Temporal extends Model
 
 	public function delete($cascade = null, $use_transaction = false)
 	{
-		//If we are using a transcation then make sure it's started
+		// If we are using a transcation then make sure it's started
 		if ($use_transaction)
 		{
 			$db = \Database_Connection::instance(static::connection(true));
 			$db->start_transaction();
 		}
 
-		//Call the observers
+		// Call the observers
 		$this->observe('before_delete');
 
-		//Load temporal properties.
+		// Load temporal properties.
 		$timestamp_end_name = static::temporal_property('end_column');
 		$mysql_timestamp = static::temporal_property('mysql_timestamp');
 
-		//Generate the correct timestamp and save it
+		// Generate the correct timestamp and save it
 		$current_timestamp = $mysql_timestamp ?
 			\Date::forge()->format('mysql') :
 			\Date::forge()->get_timestamp();
@@ -574,18 +583,18 @@ class Model_Temporal extends Model
 		$this->{$timestamp_end_name} = $current_timestamp;
 		static::enable_primary_key_check();
 
-		//Loop through all relations and delete if we are cascading.
+		// Loop through all relations and delete if we are cascading.
 		$this->freeze();
 		foreach ($this->relations() as $rel_name => $rel)
 		{
-			//get the cascade delete status
+			// get the cascade delete status
 			$relCascade = is_null($cascade) ? $rel->cascade_delete : (bool) $cascade;
 
 			if ($relCascade)
 			{
 				if(get_class($rel) != 'Orm\ManyMany')
 				{
-					//Loop through and call delete on all the models
+					// Loop through and call delete on all the models
 					foreach($rel->get($this) as $model)
 					{
 						$model->delete($cascade);
@@ -599,7 +608,7 @@ class Model_Temporal extends Model
 
 		$this->observe('after_delete');
 
-		//Make sure the transaction is committed if needed
+		// Make sure the transaction is committed if needed
 		$use_transaction and $db->commit_transaction();
 
 		return $this;
