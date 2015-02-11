@@ -219,7 +219,7 @@ class Query
 	/**
 	 * Enables the query to be cached for a specified amount of time.
 	 *
-	 * @param   integer $lifetime  number of seconds to cache or null for default
+	 * @param   integer $lifetime  number of seconds to cache or null for default, false will skip requesting a cache
 	 * @param   string  $cache_key name of the cache key to be used or null for default
 	 * @param   boolean $cache_all if true, cache all results, even empty ones
 	 *
@@ -227,7 +227,7 @@ class Query
 	 */
 	public function query_cache($lifetime = null, $cache_key = null, $cache_all = true)
 	{
-		$this->query_cache['lifetime'] = $lifetime === true ? \Config::get('novius-os.cache_duration_query', 0) : $lifetime;
+		$this->query_cache['lifetime']  = $lifetime;
 		$this->query_cache['cache_all'] = (bool)$cache_all;
 		is_string($cache_key) and $this->query_cache['cache_key'] = $cache_key;
 
@@ -1232,12 +1232,12 @@ class Query
 			}
 		}
 
-		if (is_array($this->query_cache) && \Arr::get($this->query_cache, 'lifetime', null))
+		if (\Arr::get($this->query_cache, 'lifetime', false) !== false)
 		{
 			$query = $query->cached(
 				\Arr::get($this->query_cache, 'lifetime', null),
 				\Arr::get($this->query_cache, 'cache_key', null),
-				\Arr::get($this->query_cache, 'cache_all', null)
+				\Arr::get($this->query_cache, 'cache_all', true)
 			);
 		}
 		$rows = $query->execute($this->connection)->as_array();
