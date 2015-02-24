@@ -124,6 +124,11 @@ class Query
 	protected $from_cache = true;
 
 	/**
+	 * @var  array  whether or not to retrieve a cached query
+	 */
+	protected $query_cache = array();
+
+	/**
 	 * Create a new instance of the Query class.
 	 *
 	 * @param	string  $model        Name of the model this instance has to operate on
@@ -207,6 +212,24 @@ class Query
 	public function from_cache($cache = true)
 	{
 		$this->from_cache = (bool) $cache;
+
+		return $this;
+	}
+
+	/**
+	 * Enables the query to be cached for a specified amount of time.
+	 *
+	 * @param   integer $lifetime  number of seconds to cache or null for default, false will skip requesting a cache
+	 * @param   string  $cache_key name of the cache key to be used or null for default
+	 * @param   boolean $cache_all if true, cache all results, even empty ones
+	 *
+	 * @return  $this
+	 */
+	public function query_cache($lifetime = null, $cache_key = null, $cache_all = true)
+	{
+		$this->query_cache['lifetime']  = $lifetime;
+		$this->query_cache['cache_all'] = (bool)$cache_all;
+		is_string($cache_key) and $this->query_cache['cache_key'] = $cache_key;
 
 		return $this;
 	}
@@ -1209,6 +1232,14 @@ class Query
 			}
 		}
 
+		if (\Arr::get($this->query_cache, 'lifetime', false) !== false)
+		{
+			$query = $query->cached(
+				\Arr::get($this->query_cache, 'lifetime', null),
+				\Arr::get($this->query_cache, 'cache_key', null),
+				\Arr::get($this->query_cache, 'cache_all', true)
+			);
+		}
 		$rows = $query->execute($this->connection)->as_array();
 		$result = array();
 		$model = $this->model;
