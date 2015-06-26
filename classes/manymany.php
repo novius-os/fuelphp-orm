@@ -272,13 +272,13 @@ class ManyMany extends Relation
 		);
 
 		// Builds the join conditions on the table_through
-		if (!$this->_build_join_through($joins, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_through($joins, $rel_name, $alias_to.'_through', $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the join conditions on the model_to
-		if (!$this->_build_join_to($joins, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_to($joins, $rel_name, $alias_to, $alias_to.'_through', $conditions))
 		{
 			return array();
 		}
@@ -319,7 +319,7 @@ class ManyMany extends Relation
 		reset($this->key_from);
 		foreach ($this->key_through_from as $key)
 		{
-			$joins[$rel_name.'_through']['join_on'][] = array($alias_from.'.'.current($this->key_from), '=', $alias_to.'_through.'.$key);
+			$joins[$rel_name.'_through']['join_on'][] = array($alias_from.'.'.current($this->key_from), '=', $alias_to.'.'.$key);
 			next($this->key_from);
 		}
 
@@ -341,7 +341,7 @@ class ManyMany extends Relation
 		reset($this->key_to);
 		foreach ($this->key_through_to as $key)
 		{
-			$joins[$rel_name]['join_on'][] = array($alias_to.'_through.'.$key, '=', $alias_to.'.'.current($this->key_to));
+			$joins[$rel_name]['join_on'][] = array($alias_from.'.'.$key, '=', $alias_to.'.'.current($this->key_to));
 			next($this->key_to);
 		}
 
@@ -385,7 +385,7 @@ class ManyMany extends Relation
 	protected function _build_join_where_to(&$joins, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		// Creates the custom conditions on the model_to join
-		foreach (\Arr::get($conditions, array('where', 'join_on')) as $where)
+		foreach (\Arr::get($conditions, array('where', 'join_on'), array()) as $where)
 		{
 			foreach ($where as $key => $condition)
 			{
