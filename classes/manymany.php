@@ -79,6 +79,8 @@ class ManyMany extends Relation
 			throw new \FuelException('Related model not found by Many_Many relation "'.$this->name.'": '.$this->model_to);
 		}
 		$this->model_to = get_real_class($this->model_to);
+
+		$this->key_through_order = \Arr::get($config, 'key_through_order');
 	}
 
 	/**
@@ -498,11 +500,20 @@ class ManyMany extends Relation
 			$current_model_id = $model_to ? $model_to->implode_pk($model_to) : null;
 			if ( ! in_array($current_model_id, $original_model_ids))
 			{
+				$values = $through_pks;
+
+				// Set order
+				if (!empty($this->key_through_order))
+				{
+					$values[$this->key_through_order] = $order_through;
+				}
+
 				// Insert the relation
 				\DB::insert($this->table_through)
-					->set($through_pks)
+					->set($values)
 					->execute(call_user_func(array($model_from, 'connection')))
 				;
+
 				// Prevents inserting it a second time
 				$original_model_ids[] = $current_model_id;
 			}
@@ -510,6 +521,16 @@ class ManyMany extends Relation
 			// Otherwise update the relationships if needed
 			else
 			{
+				// Set order
+				if (!empty($this->key_through_order))
+				{
+					\DB::update($this->table_through)
+						->value($this->key_through_order, $order_through)
+						->where($through_pks)
+						->execute(call_user_func(array($model_from, 'connection')))
+					;
+				}
+
 				// unset current model from from array of new relations
 				unset($del_rels[array_search($current_model_id, $original_model_ids)]);
 			}
