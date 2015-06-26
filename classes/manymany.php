@@ -245,7 +245,7 @@ class ManyMany extends Relation
 		$conditions = \Arr::merge($this->conditions, $conditions);
 
 		// Creates the joins to the model_to
-		$models = array(
+		$joins = array(
 			$rel_name.'_through' => array(
 				'model'        => null,
 				'connection'   => call_user_func(array($this->model_to, 'connection',)),
@@ -272,54 +272,54 @@ class ManyMany extends Relation
 		);
 
 		// Builds the join conditions on the table_through
-		if (!$this->_build_join_through($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_through($joins, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the join conditions on the model_to
-		if (!$this->_build_join_to($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_to($joins, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the where conditions on the table_through
-		if (!$this->_build_join_where_through($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_where_through($joins, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the where conditions on the model_to
-		if (!$this->_build_join_where_to($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_where_to($joins, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the order_by conditions
-		if (!$this->_build_join_orderby($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_orderby($joins, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
-		return $models;
+		return $joins;
 	}
 
 	/**
 	 * Builds the conditions for the table_through join
 	 *
-	 * @param $models
+	 * @param $joins
 	 * @param $rel_name
 	 * @param $alias_to
 	 * @param $alias_from
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _build_join_through(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_through(&$joins, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		reset($this->key_from);
 		foreach ($this->key_through_from as $key)
 		{
-			$models[$rel_name.'_through']['join_on'][] = array($alias_from.'.'.current($this->key_from), '=', $alias_to.'_through.'.$key);
+			$joins[$rel_name.'_through']['join_on'][] = array($alias_from.'.'.current($this->key_from), '=', $alias_to.'_through.'.$key);
 			next($this->key_from);
 		}
 
@@ -329,19 +329,19 @@ class ManyMany extends Relation
 	/**
 	 * Builds the conditions for the model_to join
 	 *
-	 * @param $models
+	 * @param $joins
 	 * @param $rel_name
 	 * @param $alias_to
 	 * @param $alias_from
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _build_join_to(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_to(&$joins, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		reset($this->key_to);
 		foreach ($this->key_through_to as $key)
 		{
-			$models[$rel_name]['join_on'][] = array($alias_to.'_through.'.$key, '=', $alias_to.'.'.current($this->key_to));
+			$joins[$rel_name]['join_on'][] = array($alias_to.'_through.'.$key, '=', $alias_to.'.'.current($this->key_to));
 			next($this->key_to);
 		}
 
@@ -351,22 +351,22 @@ class ManyMany extends Relation
 	/**
 	 * Builds the where conditions for a join
 	 *
-	 * @param $models
+	 * @param $joins
 	 * @param $rel_name
 	 * @param $alias_to
 	 * @param $alias_from
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _build_join_where_through(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_where_through(&$joins, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		// Creates the custom conditions on the table_through join
 		foreach (\Arr::get($conditions, 'through_where', array()) as $key => $condition)
 		{
 			! is_array($condition) and $condition = array($key, '=', $condition);
-			is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $models[$rel_name]['connection']);
+			is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $joins[$rel_name]['connection']);
 			$condition[0] = $this->getAliasedField($condition[0], $alias_to);
-			$models[$rel_name.'_through']['join_on'][] = $condition;
+			$joins[$rel_name.'_through']['join_on'][] = $condition;
 		}
 
 		return true;
@@ -375,14 +375,14 @@ class ManyMany extends Relation
 	/**
 	 * Builds the where conditions for a join
 	 *
-	 * @param $models
+	 * @param $joins
 	 * @param $rel_name
 	 * @param $alias_to
 	 * @param $alias_from
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _build_join_where_to(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_where_to(&$joins, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		// Creates the custom conditions on the model_to join
 		foreach (\Arr::get($conditions, array('where', 'join_on')) as $where)
@@ -390,9 +390,9 @@ class ManyMany extends Relation
 			foreach ($where as $key => $condition)
 			{
 				! is_array($condition) and $condition = array($key, '=', $condition);
-				is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $models[$rel_name]['connection']);
+				is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $joins[$rel_name]['connection']);
 				$condition[0] = $this->getAliasedField($condition[0], $alias_to);
-				$models[$rel_name]['join_on'][] = $condition;
+				$joins[$rel_name]['join_on'][] = $condition;
 			}
 		}
 
@@ -402,20 +402,20 @@ class ManyMany extends Relation
 	/**
 	 * Builds the order_by conditions for a join
 	 *
-	 * @param $models
+	 * @param $joins
 	 * @param $rel_name
 	 * @param $alias_to
 	 * @param $alias_from
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _build_join_orderby(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_orderby(&$joins, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		// Builds the order_by conditions
 		foreach (\Arr::get($conditions, 'order_by', array()) as $key => $direction)
 		{
 			$key = $this->getAliasedField($key, $alias_to);
-			$models[$rel_name]['order_by'][$key] = $direction;
+			$joins[$rel_name]['order_by'][$key] = $direction;
 		}
 
 		return true;
