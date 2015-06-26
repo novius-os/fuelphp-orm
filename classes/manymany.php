@@ -101,17 +101,17 @@ class ManyMany extends Relation
 		$query = call_user_func(array($this->model_to, 'query'));
 
 		// Builds the join on the table through
-		if (!$this->_query_build_join($query, $conditions, $alias_to, $from)) {
+		if (!$this->_build_query_join($query, $conditions, $alias_to, $from)) {
 			return array();
 		}
 
 		// Builds the where conditions
-		if (!$this->_query_build_where($query, $conditions, $alias_to, $from)) {
+		if (!$this->_build_query_where($query, $conditions, $alias_to, $from)) {
 			return array();
 		}
 
 		// Builds the order_by conditions
-		if (!$this->_query_build_orderby($query, $conditions, $alias_to, $from)) {
+		if (!$this->_build_query_orderby($query, $conditions, $alias_to, $from)) {
 			return array();
 		}
 
@@ -127,7 +127,7 @@ class ManyMany extends Relation
 	 * @param $model_from
 	 * @return array
 	 */
-	protected function _query_build_join($query, $conditions, $alias_to, $model_from)
+	protected function _build_query_join($query, $conditions, $alias_to, $model_from)
 	{
 		$join = array(
 			'table'      => array($this->table_through, $alias_to.'_through'),
@@ -167,7 +167,7 @@ class ManyMany extends Relation
 	 * @param $model_from
 	 * @return bool
 	 */
-	protected function _query_build_where($query, $conditions, $alias_to, $model_from)
+	protected function _build_query_where($query, $conditions, $alias_to, $model_from)
 	{
 		// Creates the native conditions on the query
 		reset($this->key_from);
@@ -209,7 +209,7 @@ class ManyMany extends Relation
 	 * @param $model_from
 	 * @return bool
 	 */
-	protected function _query_build_orderby($query, $conditions, $alias_to, $model_from)
+	protected function _build_query_orderby($query, $conditions, $alias_to, $model_from)
 	{
 		// Creates the custom order_by conditions on the query
 		foreach (\Arr::get($conditions, 'order_by', array()) as $field => $direction)
@@ -272,31 +272,31 @@ class ManyMany extends Relation
 		);
 
 		// Builds the join conditions on the table_through
-		if (!$this->_join_build_join_through($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_through($models, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the join conditions on the model_to
-		if (!$this->_join_build_join_to($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_to($models, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the where conditions on the table_through
-		if (!$this->_join_build_where_through($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_where_through($models, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the where conditions on the model_to
-		if (!$this->_join_build_where_to($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_where_to($models, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the order_by conditions
-		if (!$this->_join_build_orderby($models, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_orderby($models, $rel_name, $alias_to, $alias_from, $conditions))
 		{
 			return array();
 		}
@@ -314,7 +314,7 @@ class ManyMany extends Relation
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _join_build_join_through(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_through(&$models, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		reset($this->key_from);
 		foreach ($this->key_through_from as $key)
@@ -336,7 +336,7 @@ class ManyMany extends Relation
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _join_build_join_to(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_to(&$models, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		reset($this->key_to);
 		foreach ($this->key_through_to as $key)
@@ -358,7 +358,7 @@ class ManyMany extends Relation
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _join_build_where_through(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_where_through(&$models, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		// Creates the custom conditions on the table_through join
 		foreach (\Arr::get($conditions, 'through_where', array()) as $key => $condition)
@@ -382,7 +382,7 @@ class ManyMany extends Relation
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _join_build_where_to(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_where_to(&$models, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		// Creates the custom conditions on the model_to join
 		foreach (\Arr::get($conditions, array('where', 'join_on')) as $where)
@@ -409,7 +409,7 @@ class ManyMany extends Relation
 	 * @param $conditions
 	 * @return bool
 	 */
-	protected function _join_build_orderby(&$models, $rel_name, $alias_to, $alias_from, $conditions)
+	protected function _build_join_orderby(&$models, $rel_name, $alias_to, $alias_from, $conditions)
 	{
 		// Builds the order_by conditions
 		foreach (\Arr::get($conditions, 'order_by', array()) as $key => $direction)
