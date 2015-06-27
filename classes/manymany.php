@@ -56,6 +56,11 @@ class ManyMany extends Relation
 	protected $key_through_to;
 
 	/**
+	 * @var  string  order key on the connection table
+	 */
+	protected $key_through_order;
+
+	/**
 	 * @var  string  table name of model to
 	 */
 	protected $table_to;
