@@ -20,6 +20,16 @@ class ManyMany extends Relation
 
 	protected $key_to = array('id');
 
+    /**
+     * @var string   table name of model from
+     */
+    protected $table_from;
+
+    /**
+     * @var  string  table alias of model from
+     */
+    protected $alias_from;
+
 	/**
 	 * @var  string  classname of model to use as connection
 	 */
@@ -29,6 +39,11 @@ class ManyMany extends Relation
 	 * @var  string  table name of table to use as connection, alternative to $model_through setting
 	 */
 	protected $table_through;
+
+    /**
+     * @var  string  table alias of table to use as connection
+     */
+    protected $alias_through;
 
 	/**
 	 * @var  string  foreign key of from model in connection table
@@ -40,20 +55,43 @@ class ManyMany extends Relation
 	 */
 	protected $key_through_to;
 
-	public function __construct($from, $name, array $config)
+    /**
+     * @var  string  table name of model to
+     */
+    protected $table_to;
+
+    /**
+     * @var  string  table alias of model to
+     */
+    protected $alias_to;
+
+    /**
+     * Initializes the relation specified by $name on the item $from
+     *
+     * @param string $from
+     * @param string $name
+     * @param array $config
+     * @throws \FuelException
+     */
+    public function __construct($from, $name, array $config)
 	{
 		$this->name        = $name;
-		$this->model_from  = $from;
-		$this->model_to    = array_key_exists('model_to', $config)
-			? $config['model_to'] : \Inflector::get_namespace($from).'Model_'.\Inflector::classify($name);
-		$this->key_from    = array_key_exists('key_from', $config)
-			? (array) $config['key_from'] : $this->key_from;
-		$this->key_to      = array_key_exists('key_to', $config)
-			? (array) $config['key_to'] : $this->key_to;
-		$this->conditions  = array_key_exists('conditions', $config)
-			? (array) $config['conditions'] : array();
 
-		if ( ! empty($config['table_through']))
+        // Sets the properties of the model from
+		$this->model_from = $from;
+        $this->table_from = call_user_func(array($this->model_from, 'table'));
+		$this->key_from = array_key_exists('key_from', $config) ? (array) $config['key_from'] : $this->key_from;
+
+        // Sets the properties of the model to
+        $this->model_to = array_key_exists('model_to', $config) ? $config['model_to'] : $this->getRelationModel($name, $from);
+        $this->table_to = call_user_func(array($this->model_to, 'table'));
+		$this->key_to = array_key_exists('key_to', $config) ? (array) $config['key_to'] : $this->key_to;
+
+        // Sets the conditions
+		$this->conditions = array_key_exists('conditions', $config) ? (array) $config['conditions'] : array();
+
+        // Sets the properties of the table through
+		if (!empty($config['table_through']))
 		{
 			$this->table_through = $config['table_through'];
 		}
@@ -64,23 +102,22 @@ class ManyMany extends Relation
 			$table_name = array_merge($table_name);
 			$this->table_through = \Inflector::tableize($table_name[0]).'_'.\Inflector::tableize($table_name[1]);
 		}
-		$this->key_through_from = ! empty($config['key_through_from'])
+		$this->key_through_from = !empty($config['key_through_from'])
 			? (array) $config['key_through_from'] : (array) \Inflector::foreign_key($this->model_from);
-		$this->key_through_to = ! empty($config['key_through_to'])
+		$this->key_through_to = !empty($config['key_through_to'])
 			? (array) $config['key_through_to'] : (array) \Inflector::foreign_key($this->model_to);
+        $this->key_through_order = (string) \Arr::get($config, 'key_through_order');
 
-		$this->cascade_save    = array_key_exists('cascade_save', $config)
-			? $config['cascade_save'] : $this->cascade_save;
-		$this->cascade_delete  = array_key_exists('cascade_delete', $config)
-			? $config['cascade_delete'] : $this->cascade_delete;
+        // Sets the cascade properties
+		$this->cascade_save = array_key_exists('cascade_save', $config) ? $config['cascade_save'] : $this->cascade_save;
+		$this->cascade_delete = array_key_exists('cascade_delete', $config) ? $config['cascade_delete'] : $this->cascade_delete;
 
-		if ( ! class_exists($this->model_to))
+        // Checks if the model to exists
+		if (!class_exists($this->model_to))
 		{
 			throw new \FuelException('Related model not found by Many_Many relation "'.$this->name.'": '.$this->model_to);
 		}
 		$this->model_to = get_real_class($this->model_to);
-
-		$this->key_through_order = \Arr::get($config, 'key_through_order');
 	}
 
 	/**
@@ -92,7 +129,9 @@ class ManyMany extends Relation
 	 */
 	public function get(Model $from, array $conditions = array())
 	{
-		$alias_to = 't0';
+		$this->alias_to = 't0';
+		$this->alias_from = null;
+		$this->alias_through = $this->alias_to.'_through';
 
 		// Merges the conditions of the relation with the specific conditions
 		$conditions = \Arr::merge($this->conditions, $conditions);
@@ -101,17 +140,20 @@ class ManyMany extends Relation
 		$query = call_user_func(array($this->model_to, 'query'));
 
 		// Builds the join on the table through
-		if (!$this->_build_query_join($query, $conditions, $alias_to, $from)) {
+		if (!$this->_build_query_join($query, $conditions, $this->alias_to, $from))
+		{
 			return array();
 		}
 
 		// Builds the where conditions
-		if (!$this->_build_query_where($query, $conditions, $alias_to, $from)) {
+		if (!$this->_build_query_where($query, $conditions, $this->alias_to, $from))
+		{
 			return array();
 		}
 
 		// Builds the order_by conditions
-		if (!$this->_build_query_orderby($query, $conditions, $alias_to, $from)) {
+		if (!$this->_build_query_orderby($query, $conditions, $this->alias_to, $from))
+		{
 			return array();
 		}
 
@@ -130,25 +172,26 @@ class ManyMany extends Relation
 	protected function _build_query_join($query, $conditions, $alias_to, $model_from)
 	{
 		$join = array(
-			'table'      => array($this->table_through, $alias_to.'_through'),
+			'table'      => array($this->table_through, $this->alias_through),
 			'join_type'  => null,
 			'join_on'    => array(),
-			'columns'    => $this->select_through($alias_to.'_through')
+			'columns'    => $this->select_through($this->alias_through)
 		);
 
 		// Creates the native conditions on the join
 		reset($this->key_to);
 		foreach ($this->key_through_to as $key)
 		{
-			$join['join_on'][] = array($alias_to.'_through.'.$key, '=', $alias_to.'.'.current($this->key_to));
+			$join['join_on'][] = array($this->alias_through.'.'.$key, '=', $alias_to.'.'.current($this->key_to));
 			next($this->key_to);
 		}
 
 		// Creates the custom conditions on the join
-		foreach (\Arr::get($conditions, 'join_on', array()) as $key => $condition) {
+		foreach (\Arr::get($conditions, 'join_on', array()) as $key => $condition)
+		{
 			is_array($condition) or $condition = array($key, '=', $condition);
 			reset($condition);
-			$condition[key($condition)] = $alias_to.'_through.'.current($condition);
+			$condition[key($condition)] = $this->alias_through.'.'.current($condition);
 			$join['join_on'][] = $condition;
 		}
 
@@ -177,7 +220,7 @@ class ManyMany extends Relation
 			{
 				return false;
 			}
-			$query->where($alias_to.'_through.'.$key, $model_from->{current($this->key_from)});
+			$query->where($this->alias_through.'.'.$key, $model_from->{current($this->key_from)});
 			next($this->key_from);
 		}
 
@@ -185,7 +228,7 @@ class ManyMany extends Relation
 		foreach (\Arr::get($conditions, 'through_where', array()) as $key => $condition)
 		{
 			is_array($condition) or $condition = array($key, '=', $condition);
-			$condition[0] = $alias_to.'_through.'.$condition[0];
+			$condition[0] = $this->alias_through.'.'.$condition[0];
 			$query->where($condition);
 		}
 
@@ -193,7 +236,8 @@ class ManyMany extends Relation
 		foreach (\Arr::get($conditions, 'where', array()) as $key => $condition)
 		{
 			is_array($condition) or $condition = array($key, '=', $condition);
-			$condition[0] = $this->getAliasedField($condition[0], $alias_to);
+            // @todo handles the special case of a "where" condition with an alias on the model from when there is no table from (eg. when the get() is called)
+            $condition[0] = $this->getAliasedField($condition[0]);
 			$query->where($condition);
 		}
 
@@ -220,7 +264,7 @@ class ManyMany extends Relation
 			}
 			else
 			{
-				$field = $this->getAliasedField($field, $alias_to);
+				$field = $this->getAliasedField($field);
 				$query->order_by($field, $direction);
 			}
 		}
@@ -229,7 +273,7 @@ class ManyMany extends Relation
 	}
 
 	/**
-	 * Gets the properties to join the related items for a query
+     * Gets the properties to join the related items on a query
 	 *
 	 * @param $alias_from
 	 * @param $rel_name
@@ -239,7 +283,9 @@ class ManyMany extends Relation
 	 */
 	public function join($alias_from, $rel_name, $alias_to_nr, $conditions = array())
 	{
-		$alias_to = 't'.$alias_to_nr;
+		$this->alias_to = 't'.$alias_to_nr;
+        $this->alias_from = $alias_from;
+		$this->alias_through = $this->alias_to.'_through';
 
 		// Merges the conditions of the relation with the specific conditions
 		$conditions = \Arr::merge($this->conditions, $conditions);
@@ -249,54 +295,54 @@ class ManyMany extends Relation
 			$rel_name.'_through' => array(
 				'model'        => null,
 				'connection'   => call_user_func(array($this->model_to, 'connection',)),
-				'table'        => array($this->table_through, $alias_to.'_through'),
+				'table'        => array($this->table_through, $this->alias_through),
 				'primary_key'  => null,
 				'join_type'    => \Arr::get($conditions, 'join_type', 'left'),
 				'join_on'      => array(),
-				'columns'      => $this->select_through($alias_to.'_through'),
+				'columns'      => $this->select_through($this->alias_through),
 				'rel_name'     => $this->model_through,
 				'relation'     => $this
 			),
 			$rel_name => array(
 				'model'        => $this->model_to,
 				'connection'   => call_user_func(array($this->model_to, 'connection')),
-				'table'        => array(call_user_func(array($this->model_to, 'table')), $alias_to),
+				'table'        => array(call_user_func(array($this->model_to, 'table')), $this->alias_to),
 				'primary_key'  => call_user_func(array($this->model_to, 'primary_key')),
 				'join_type'    => \Arr::get($conditions, 'join_type', 'left'),
 				'join_on'      => array(),
-				'columns'      => $this->select($alias_to),
-				'rel_name'     => strpos($rel_name, '.') ? substr($rel_name, strrpos($rel_name, '.') + 1) : $rel_name,
+				'columns'      => $this->select($this->alias_to),
+				'rel_name'     => $this->getRelationName($rel_name),
 				'relation'     => $this,
-				'where'        => \Arr::get($conditions, 'where', array()),
+				'where'        => array(),
 			)
 		);
 
 		// Builds the join conditions on the table_through
-		if (!$this->_build_join_through($joins, $rel_name, $alias_to.'_through', $alias_from, $conditions))
+		if (!$this->_build_join_through($joins, $rel_name, $this->alias_through, $this->alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the join conditions on the model_to
-		if (!$this->_build_join_to($joins, $rel_name, $alias_to, $alias_to.'_through', $conditions))
+		if (!$this->_build_join_to($joins, $rel_name, $this->alias_to, $this->alias_through, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the where conditions on the table_through
-		if (!$this->_build_join_where_through($joins, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_where_through($joins, $rel_name, $this->alias_to, $this->alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the where conditions on the model_to
-		if (!$this->_build_join_where_to($joins, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_where_to($joins, $rel_name, $this->alias_to, $this->alias_from, $conditions))
 		{
 			return array();
 		}
 
 		// Builds the order_by conditions
-		if (!$this->_build_join_orderby($joins, $rel_name, $alias_to, $alias_from, $conditions))
+		if (!$this->_build_join_orderby($joins, $rel_name, $this->alias_to, $this->alias_from, $conditions))
 		{
 			return array();
 		}
@@ -363,9 +409,9 @@ class ManyMany extends Relation
 		// Creates the custom conditions on the table_through join
 		foreach (\Arr::get($conditions, 'through_where', array()) as $key => $condition)
 		{
-			! is_array($condition) and $condition = array($key, '=', $condition);
+			!is_array($condition) and $condition = array($key, '=', $condition);
 			is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $joins[$rel_name]['connection']);
-			$condition[0] = $this->getAliasedField($condition[0], $alias_to);
+			$condition[0] = $this->getAliasedField($condition[0]);
 			$joins[$rel_name.'_through']['join_on'][] = $condition;
 		}
 
@@ -389,9 +435,9 @@ class ManyMany extends Relation
 		{
 			foreach ($where as $key => $condition)
 			{
-				! is_array($condition) and $condition = array($key, '=', $condition);
+				!is_array($condition) and $condition = array($key, '=', $condition);
 				is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $joins[$rel_name]['connection']);
-				$condition[0] = $this->getAliasedField($condition[0], $alias_to);
+				$condition[0] = $this->getAliasedField($condition[0]);
 				$joins[$rel_name]['join_on'][] = $condition;
 			}
 		}
@@ -414,7 +460,7 @@ class ManyMany extends Relation
 		// Builds the order_by conditions
 		foreach (\Arr::get($conditions, 'order_by', array()) as $key => $direction)
 		{
-			$key = $this->getAliasedField($key, $alias_to);
+			$key = $this->getAliasedField($key);
 			$joins[$rel_name]['order_by'][$key] = $direction;
 		}
 
@@ -453,12 +499,12 @@ class ManyMany extends Relation
 	 */
 	public function save($model_from, $models_to, $original_model_ids, $parent_saved, $cascade)
 	{
-		if ( ! $parent_saved)
+		if (!$parent_saved)
 		{
 			return;
 		}
 
-		if ( ! is_array($models_to) and ($models_to = is_null($models_to) ? array() : $models_to) !== array())
+		if (!is_array($models_to) and ($models_to = is_null($models_to) ? array() : $models_to) !== array())
 		{
 			throw new \FuelException('Assigned relationships must be an array or null, given relationship value for '.
 				$this->name.' is invalid.');
@@ -469,7 +515,7 @@ class ManyMany extends Relation
 		$order_through = 0;
 		foreach ($models_to as $key => $model_to)
 		{
-			if ( ! $model_to instanceof $this->model_to)
+			if (!$model_to instanceof $this->model_to)
 			{
 				throw new \FuelException('Invalid Model instance added to relations in this model.');
 			}
@@ -498,7 +544,7 @@ class ManyMany extends Relation
 
 			// Insert the relationships if not already assigned
 			$current_model_id = $model_to ? $model_to->implode_pk($model_to) : null;
-			if ( ! in_array($current_model_id, $original_model_ids))
+			if (!in_array($current_model_id, $original_model_ids))
 			{
 				$values = $through_pks;
 
@@ -540,7 +586,7 @@ class ManyMany extends Relation
 			{
 				$model_from->unfreeze();
 				$rel = $model_from->_relate();
-				if ( ! empty($rel[$this->name][$key]) and $rel[$this->name][$key] === $model_to)
+				if (!empty($rel[$this->name][$key]) and $rel[$this->name][$key] === $model_to)
 				{
 					unset($rel[$this->name][$key]);
 				}
@@ -576,7 +622,7 @@ class ManyMany extends Relation
 		}
 
 		$cascade = is_null($cascade) ? $this->cascade_save : (bool) $cascade;
-		if ($cascade and ! empty($models_to))
+		if ($cascade and !empty($models_to))
 		{
 			foreach ($models_to as $m)
 			{
@@ -595,7 +641,7 @@ class ManyMany extends Relation
 	 */
 	public function delete($model_from, $models_to, $parent_deleted, $cascade)
 	{
-		if ( ! $parent_deleted)
+		if (!$parent_deleted)
 		{
 			return;
 		}
@@ -611,7 +657,7 @@ class ManyMany extends Relation
 		$this->delete_related($model_from);
 
 		$cascade = is_null($cascade) ? $this->cascade_delete : (bool) $cascade;
-		if ($cascade and ! empty($models_to))
+		if ($cascade and !empty($models_to))
 		{
 			foreach ($models_to as $m)
 			{
@@ -642,10 +688,10 @@ class ManyMany extends Relation
 	 * Return $field after setting/replacing the table alias
 	 *
 	 * @param $field
-	 * @param $alias_to
+	 * @param $no_relation_from
 	 * @return mixed|string
 	 */
-	public function getAliasedField($field, $alias_to)
+	public function getAliasedField($field)
 	{
 		if ($field instanceof \Fuel\Core\Database_Expression)
 		{
@@ -654,19 +700,58 @@ class ManyMany extends Relation
 
 		if (strpos($field, '.') !== false)
 		{
-			// Replace the table name by the corresponding alias
-			$field = str_replace(
-				array($this->table_through.'.', call_user_func(array($this->model_to, 'table')).'.'),
-				array($alias_to.'_through.', $alias_to.'.'),
-				$field
-			);
+            $replaces = array(
+                array($this->table_to.'.'),
+                array($this->alias_to.'.'),
+            );
+			if ($this->table_through && $this->alias_through)
+			{
+				$replaces[0][] = $this->table_through.'.';
+				$replaces[1][] = $this->alias_through.'.';
+			}
+			if ($this->table_from && $this->alias_from)
+			{
+				$replaces[0][] = $this->table_from.'.';
+				$replaces[1][] = $this->alias_from.'.';
+			}
+
+			// Replace each table name by the corresponding alias
+			$field = str_replace($replaces[0], $replaces[1], $field);
 		}
 		else
 		{
 			// Set the alias on the field
-			$field = $alias_to.'.'.$field;
+			$field = $this->alias_to.'.'.$field;
 		}
 
 		return $field;
 	}
+
+    /**
+     * Gets the relation name from a relation path
+     *
+     * @param $path
+     * @return string
+     */
+    public function getRelationName($path)
+	{
+        // Removes the path before the relation name
+        if (strrpos($path, '.') !== false)
+		{
+            $path = substr($path, strrpos($path, '.') + 1);
+        }
+        return $path;
+    }
+
+    /**
+     * Gets the model of the $relation_name on the item $from
+     *
+     * @param $relation_name
+     * @param $from
+     * @return string
+     */
+    protected function getRelationModel($relation_name, $from)
+	{
+        return \Inflector::get_namespace($from).'Model_'.\Inflector::classify($relation_name);
+    }
 }
