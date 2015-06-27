@@ -20,15 +20,15 @@ class ManyMany extends Relation
 
 	protected $key_to = array('id');
 
-    /**
-     * @var string   table name of model from
-     */
-    protected $table_from;
+	/**
+	 * @var string   table name of model from
+	 */
+	protected $table_from;
 
-    /**
-     * @var  string  table alias of model from
-     */
-    protected $alias_from;
+	/**
+	 * @var  string  table alias of model from
+	 */
+	protected $alias_from;
 
 	/**
 	 * @var  string  classname of model to use as connection
@@ -40,10 +40,10 @@ class ManyMany extends Relation
 	 */
 	protected $table_through;
 
-    /**
-     * @var  string  table alias of table to use as connection
-     */
-    protected $alias_through;
+	/**
+	 * @var  string  table alias of table to use as connection
+	 */
+	protected $alias_through;
 
 	/**
 	 * @var  string  foreign key of from model in connection table
@@ -55,42 +55,42 @@ class ManyMany extends Relation
 	 */
 	protected $key_through_to;
 
-    /**
-     * @var  string  table name of model to
-     */
-    protected $table_to;
+	/**
+	 * @var  string  table name of model to
+	 */
+	protected $table_to;
 
-    /**
-     * @var  string  table alias of model to
-     */
-    protected $alias_to;
+	/**
+	 * @var  string  table alias of model to
+	 */
+	protected $alias_to;
 
-    /**
-     * Initializes the relation specified by $name on the item $from
-     *
-     * @param string $from
-     * @param string $name
-     * @param array $config
-     * @throws \FuelException
-     */
-    public function __construct($from, $name, array $config)
+	/**
+	 * Initializes the relation specified by $name on the item $from
+	 *
+	 * @param string $from
+	 * @param string $name
+	 * @param array $config
+	 * @throws \FuelException
+	 */
+	public function __construct($from, $name, array $config)
 	{
 		$this->name        = $name;
 
-        // Sets the properties of the model from
+		// Sets the properties of the model from
 		$this->model_from = $from;
-        $this->table_from = call_user_func(array($this->model_from, 'table'));
+		$this->table_from = call_user_func(array($this->model_from, 'table'));
 		$this->key_from = array_key_exists('key_from', $config) ? (array) $config['key_from'] : $this->key_from;
 
-        // Sets the properties of the model to
-        $this->model_to = array_key_exists('model_to', $config) ? $config['model_to'] : $this->getRelationModel($name, $from);
-        $this->table_to = call_user_func(array($this->model_to, 'table'));
+		// Sets the properties of the model to
+		$this->model_to = array_key_exists('model_to', $config) ? $config['model_to'] : $this->getRelationModel($name, $from);
+		$this->table_to = call_user_func(array($this->model_to, 'table'));
 		$this->key_to = array_key_exists('key_to', $config) ? (array) $config['key_to'] : $this->key_to;
 
-        // Sets the conditions
+		// Sets the conditions
 		$this->conditions = array_key_exists('conditions', $config) ? (array) $config['conditions'] : array();
 
-        // Sets the properties of the table through
+		// Sets the properties of the table through
 		if (!empty($config['table_through']))
 		{
 			$this->table_through = $config['table_through'];
@@ -106,13 +106,13 @@ class ManyMany extends Relation
 			? (array) $config['key_through_from'] : (array) \Inflector::foreign_key($this->model_from);
 		$this->key_through_to = !empty($config['key_through_to'])
 			? (array) $config['key_through_to'] : (array) \Inflector::foreign_key($this->model_to);
-        $this->key_through_order = (string) \Arr::get($config, 'key_through_order');
+		$this->key_through_order = (string) \Arr::get($config, 'key_through_order');
 
-        // Sets the cascade properties
+		// Sets the cascade properties
 		$this->cascade_save = array_key_exists('cascade_save', $config) ? $config['cascade_save'] : $this->cascade_save;
 		$this->cascade_delete = array_key_exists('cascade_delete', $config) ? $config['cascade_delete'] : $this->cascade_delete;
 
-        // Checks if the model to exists
+		// Checks if the model to exists
 		if (!class_exists($this->model_to))
 		{
 			throw new \FuelException('Related model not found by Many_Many relation "'.$this->name.'": '.$this->model_to);
@@ -236,8 +236,8 @@ class ManyMany extends Relation
 		foreach (\Arr::get($conditions, 'where', array()) as $key => $condition)
 		{
 			is_array($condition) or $condition = array($key, '=', $condition);
-            // @todo handles the special case of a "where" condition with an alias on the model from when there is no table from (eg. when the get() is called)
-            $condition[0] = $this->getAliasedField($condition[0]);
+			// @todo handles the special case of a "where" condition with an alias on the model from when there is no table from (eg. when the get() is called)
+			$condition[0] = $this->getAliasedField($condition[0]);
 			$query->where($condition);
 		}
 
@@ -273,7 +273,7 @@ class ManyMany extends Relation
 	}
 
 	/**
-     * Gets the properties to join the related items on a query
+	 * Gets the properties to join the related items on a query
 	 *
 	 * @param $alias_from
 	 * @param $rel_name
@@ -284,7 +284,7 @@ class ManyMany extends Relation
 	public function join($alias_from, $rel_name, $alias_to_nr, $conditions = array())
 	{
 		$this->alias_to = 't'.$alias_to_nr;
-        $this->alias_from = $alias_from;
+		$this->alias_from = $alias_from;
 		$this->alias_through = $this->alias_to.'_through';
 
 		// Merges the conditions of the relation with the specific conditions
@@ -700,10 +700,10 @@ class ManyMany extends Relation
 
 		if (strpos($field, '.') !== false)
 		{
-            $replaces = array(
-                array($this->table_to.'.'),
-                array($this->alias_to.'.'),
-            );
+			$replaces = array(
+				array($this->table_to.'.'),
+				array($this->alias_to.'.'),
+			);
 			if ($this->table_through && $this->alias_through)
 			{
 				$replaces[0][] = $this->table_through.'.';
@@ -727,31 +727,31 @@ class ManyMany extends Relation
 		return $field;
 	}
 
-    /**
-     * Gets the relation name from a relation path
-     *
-     * @param $path
-     * @return string
-     */
-    public function getRelationName($path)
+	/**
+	 * Gets the relation name from a relation path
+	 *
+	 * @param $path
+	 * @return string
+	 */
+	public function getRelationName($path)
 	{
-        // Removes the path before the relation name
-        if (strrpos($path, '.') !== false)
+		// Removes the path before the relation name
+		if (strrpos($path, '.') !== false)
 		{
-            $path = substr($path, strrpos($path, '.') + 1);
-        }
-        return $path;
-    }
+			$path = substr($path, strrpos($path, '.') + 1);
+		}
+		return $path;
+	}
 
-    /**
-     * Gets the model of the $relation_name on the item $from
-     *
-     * @param $relation_name
-     * @param $from
-     * @return string
-     */
-    protected function getRelationModel($relation_name, $from)
+	/**
+	 * Gets the model of the $relation_name on the item $from
+	 *
+	 * @param $relation_name
+	 * @param $from
+	 * @return string
+	 */
+	protected function getRelationModel($relation_name, $from)
 	{
-        return \Inflector::get_namespace($from).'Model_'.\Inflector::classify($relation_name);
-    }
+		return \Inflector::get_namespace($from).'Model_'.\Inflector::classify($relation_name);
+	}
 }
