@@ -242,7 +242,7 @@ class ManyMany extends Relation
 		{
 			is_array($condition) or $condition = array($key, '=', $condition);
 			// @todo handles the special case of a "where" condition with an alias on the model from when there is no table from (eg. when the get() is called)
-			$condition[0] = $this->getAliasedField($condition[0]);
+			$condition[0] = $this->getAliasedField($condition[0], $alias_to);
 			$query->where($condition);
 		}
 
@@ -269,7 +269,7 @@ class ManyMany extends Relation
 			}
 			else
 			{
-				$field = $this->getAliasedField($field);
+				$field = $this->getAliasedField($field, $alias_to);
 				$query->order_by($field, $direction);
 			}
 		}
@@ -416,7 +416,7 @@ class ManyMany extends Relation
 		{
 			!is_array($condition) and $condition = array($key, '=', $condition);
 			is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $joins[$rel_name]['connection']);
-			$condition[0] = $this->getAliasedField($condition[0]);
+			$condition[0] = $this->getAliasedField($condition[0], $this->alias_through);
 			$joins[$rel_name.'_through']['join_on'][] = $condition;
 		}
 
@@ -442,7 +442,7 @@ class ManyMany extends Relation
 			{
 				!is_array($condition) and $condition = array($key, '=', $condition);
 				is_string($condition[2]) and $condition[2] = \Db::quote($condition[2], $joins[$rel_name]['connection']);
-				$condition[0] = $this->getAliasedField($condition[0]);
+				$condition[0] = $this->getAliasedField($condition[0], $alias_to);
 				$joins[$rel_name]['join_on'][] = $condition;
 			}
 		}
@@ -465,7 +465,7 @@ class ManyMany extends Relation
 		// Builds the order_by conditions
 		foreach (\Arr::get($conditions, 'order_by', array()) as $key => $direction)
 		{
-			$key = $this->getAliasedField($key);
+			$key = $this->getAliasedField($key, $alias_to);
 			$joins[$rel_name]['order_by'][$key] = $direction;
 		}
 
@@ -693,10 +693,10 @@ class ManyMany extends Relation
 	 * Return $field after setting/replacing the table alias
 	 *
 	 * @param $field
-	 * @param $no_relation_from
+	 * @param null|string $defaut_alias
 	 * @return mixed|string
 	 */
-	public function getAliasedField($field)
+	public function getAliasedField($field, $defaut_alias = null)
 	{
 		if ($field instanceof \Fuel\Core\Database_Expression)
 		{
@@ -726,7 +726,7 @@ class ManyMany extends Relation
 		else
 		{
 			// Set the alias on the field
-			$field = $this->alias_to.'.'.$field;
+            $field = ($defaut_alias ? $defaut_alias : $this->alias_to).'.'.$field;
 		}
 
 		return $field;
