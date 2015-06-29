@@ -196,7 +196,7 @@ class ManyMany extends Relation
 		{
 			is_array($condition) or $condition = array($key, '=', $condition);
 			reset($condition);
-			$condition[key($condition)] = $this->alias_through.'.'.current($condition);
+			$condition[key($condition)] = $this->getAliasedField(current($condition), $this->alias_through);
 			$join['join_on'][] = $condition;
 		}
 
