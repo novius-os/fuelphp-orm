@@ -726,7 +726,7 @@ class ManyMany extends Relation
 		else
 		{
 			// Set the alias on the field
-            $field = ($defaut_alias ? $defaut_alias : $this->alias_to).'.'.$field;
+			$field = ($defaut_alias ? $defaut_alias : $this->alias_to).'.'.$field;
 		}
 
 		return $field;
