@@ -263,15 +263,13 @@ class ManyMany extends Relation
 		// Creates the custom order_by conditions on the query
 		foreach (\Arr::get($conditions, 'order_by', array()) as $field => $direction)
 		{
-			if (is_numeric($field))
-			{
-				$query->order_by($direction);
+			if (is_numeric($field)) {
+				$field = $direction;
+				$direction = null;
 			}
-			else
-			{
-				$field = $this->getAliasedField($field, $alias_to);
-				$query->order_by($field, $direction);
-			}
+
+			$field = $this->getAliasedField($field, $alias_to);
+			$query->order_by($field, $direction);
 		}
 
 		return true;
