@@ -214,14 +214,10 @@ class HasMany extends Relation
 			{
 				$frozen = $obj->frozen(); // only unfreeze/refreeze when it was frozen
 				$frozen and $obj->unfreeze();
-				foreach ($this->key_to as $fk)
-				{
-					$obj->{$fk} = null;
-				}
-				$frozen and $obj->freeze();
-
-				// cascading this change won't work here, save just the object with cascading switched off
-				$obj->save(false);
+                $model_from->unfreeze();
+                // Delete the related object
+                $obj->delete();
+                $model_from->freeze();
 			}
 		}
 
