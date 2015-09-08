@@ -214,10 +214,10 @@ class HasMany extends Relation
 			{
 				$frozen = $obj->frozen(); // only unfreeze/refreeze when it was frozen
 				$frozen and $obj->unfreeze();
-                $model_from->unfreeze();
-                // Delete the related object
-                $obj->delete();
-                $model_from->freeze();
+				$model_from->unfreeze();
+				// Delete the related object
+				$obj->delete();
+				$model_from->freeze();
 			}
 		}
 
