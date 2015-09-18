@@ -248,12 +248,11 @@ class ManyMany extends Relation
 				// by replacing it with the value of the field property on the $model_from
 				if (\Str::starts_with($condition[0], $this->table_from.'.')) {
 					list(, $field) = explode('.', $condition[0], 2);
-					if (isset($model_from->{$field})) {
-						$condition[0] = \DB::expr(\DB::quote($model_from->{$field}));
-					} else {
-						// Skip if the field property doesn't exist on the $model_from
-						continue;
+					if (!isset($model_from->{$field})) {
+						// The field does not exists on $model_from
+						throw new \FuelException('The field '.$field.' does not exists on the model '.get_class($model_from));
 					}
+					$condition[0] = \DB::expr(\DB::quote($model_from->{$field}));
 				}
 			}
     
