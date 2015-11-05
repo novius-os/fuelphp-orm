@@ -290,6 +290,10 @@ class ManyMany extends Relation
 		$this->alias_from = $alias_from;
 		$this->alias_through = $this->alias_to.'_through';
 
+		// Extracts the where conditions that should be applied on the whole query
+		$where = (array) \Arr::get($conditions, 'where', array());
+		\Arr::delete($conditions, 'where');
+
 		// Merges the conditions of the relation with the specific conditions
 		$conditions = \Arr::merge($this->conditions, $conditions);
 
@@ -316,7 +320,7 @@ class ManyMany extends Relation
 				'columns'      => $this->select($this->alias_to),
 				'rel_name'     => $this->getRelationName($rel_name),
 				'relation'     => $this,
-				'where'        => array(),
+				'where'        => $where, // Theses conditions will be applied on the whole query
 			)
 		);
 
