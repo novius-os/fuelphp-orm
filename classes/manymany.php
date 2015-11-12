@@ -241,8 +241,21 @@ class ManyMany extends Relation
 		foreach (\Arr::get($conditions, 'where', array()) as $key => $condition)
 		{
 			is_array($condition) or $condition = array($key, '=', $condition);
-			// @todo handles the special case of a "where" condition with an alias on the model from when there is no table from (eg. when the get() is called)
 			$condition[0] = $this->getAliasedField($condition[0], $alias_to);
+			
+			if (!($condition[0] instanceof \Fuel\Core\Database_Expression)) {
+				// Handles the special case of a condition whose field is on the table from
+				// by replacing it with the value of the field property on the $model_from
+				if (\Str::starts_with($condition[0], $this->table_from.'.')) {
+					list(, $field) = explode('.', $condition[0], 2);
+					if (!isset($model_from->{$field})) {
+						// The field does not exists on $model_from
+						throw new \FuelException('The field '.$field.' does not exists on the model '.get_class($model_from));
+					}
+					$condition[0] = \DB::expr(\DB::quote($model_from->{$field}));
+				}
+			}
+    
 			$query->where($condition);
 		}
 
