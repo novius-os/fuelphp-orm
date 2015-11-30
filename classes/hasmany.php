@@ -212,12 +212,25 @@ class HasMany extends Relation
 			if ($original_model_id and $obj = call_user_func(array($this->model_to, 'find'),
 				count($this->key_to) == 1 ? array($original_model_id) : explode('][', substr($original_model_id, 1, -1))))
 			{
-				$frozen = $obj->frozen(); // only unfreeze/refreeze when it was frozen
+				// only unfreeze/refreeze when it was frozen
+				$frozen = $obj->frozen();
 				$frozen and $obj->unfreeze();
-				$model_from->unfreeze();
-				// Delete the related object
-				$obj->delete();
-				$model_from->freeze();
+				
+				// Deletes the related item if cascade delete is enabled
+				if ($this->cascade_delete) {
+					$model_from->unfreeze();
+					$obj->delete();
+					$model_from->freeze();
+				}
+				// Otherwise just resets the key_to
+				else {
+					foreach ($this->key_to as $fk)
+					{
+						$obj->{$fk} = null;
+					}
+					$frozen and $obj->freeze();
+					$obj->is_changed() and $obj->save(false);
+				}
 			}
 		}
 
